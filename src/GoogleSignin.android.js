@@ -1,17 +1,20 @@
-import React, { Component } from 'react';
-import PropTypes from 'prop-types';
+import React, { Component } from "react";
+import PropTypes from "prop-types";
 
 import {
   View,
   DeviceEventEmitter,
   NativeModules,
   requireNativeComponent,
-  ViewPropTypes,
-} from 'react-native';
+  ViewPropTypes
+} from "react-native";
 
 const { RNGoogleSignin } = NativeModules;
 
-const RNGoogleSigninButton = requireNativeComponent('RNGoogleSigninButton', null);
+const RNGoogleSigninButton = requireNativeComponent(
+  "RNGoogleSigninButton",
+  null
+);
 
 class GoogleSigninButton extends Component {
   static propTypes = {
@@ -21,9 +24,12 @@ class GoogleSigninButton extends Component {
   };
 
   componentDidMount() {
-    this._clickListener = DeviceEventEmitter.addListener('RNGoogleSigninButtonClicked', () => {
-      this.props.onPress && this.props.onPress();
-    });
+    this._clickListener = DeviceEventEmitter.addListener(
+      "RNGoogleSigninButtonClicked",
+      () => {
+        this.props.onPress && this.props.onPress();
+      }
+    );
   }
 
   componentWillUnmount() {
@@ -34,7 +40,10 @@ class GoogleSigninButton extends Component {
     const { style, ...props } = this.props;
 
     return (
-      <RNGoogleSigninButton style={[{ backgroundColor: 'transparent' }, style]} {...props} />
+      <RNGoogleSigninButton
+        style={[{ backgroundColor: "transparent" }, style]}
+        {...props}
+      />
     );
   }
 }
@@ -54,13 +63,12 @@ GoogleSigninButton.Color = {
 class GoogleSigninError extends Error {
   constructor(error, code) {
     super(error);
-    this.name = 'GoogleSigninError';
-    this.code  = code;
+    this.name = "GoogleSigninError";
+    this.code = code;
   }
 }
 
 class GoogleSignin {
-
   constructor() {
     this._user = null;
   }
@@ -76,7 +84,7 @@ class GoogleSignin {
       params.offlineAccess || false,
       params.forceConsentPrompt || false,
       params.accountName || null,
-      params.hostedDomain || null,
+      params.hostedDomain || null
     ];
 
     return RNGoogleSignin.configure(...params);
@@ -84,52 +92,66 @@ class GoogleSignin {
 
   currentUserAsync() {
     return new Promise((resolve, reject) => {
-      const sucessCb = DeviceEventEmitter.addListener('RNGoogleSignInSilentSuccess', (user) => {
-        this._user = {...user};
+      const sucessCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignInSilentSuccess",
+        user => {
+          this._user = { ...user };
 
-        RNGoogleSignin.getAccessToken(user).then((token) => {
-          this._user.accessToken = token;
-          this._removeListeners(sucessCb, errorCb);
-          resolve(this._user);
-        })
-        .catch(err => {
-          this._removeListeners(sucessCb, errorCb);
-          resolve(this._user);
-        });
-      });
+          RNGoogleSignin.getAccessToken(user)
+            .then(token => {
+              this._user.accessToken = token;
+              this._removeListeners(sucessCb, errorCb);
+              resolve(this._user);
+            })
+            .catch(err => {
+              this._removeListeners(sucessCb, errorCb);
+              resolve(this._user);
+            });
+        }
+      );
 
-      const errorCb = DeviceEventEmitter.addListener('RNGoogleSignInSilentError', (err) => {
-        this._removeListeners(sucessCb, errorCb);
-        resolve(null);
-      });
+      const errorCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignInSilentError",
+        err => {
+          this._removeListeners(sucessCb, errorCb);
+          resolve(null);
+        }
+      );
 
       RNGoogleSignin.currentUserAsync();
     });
   }
 
   currentUser() {
-    return {...this._user};
+    return { ...this._user };
   }
 
   signIn() {
     return new Promise((resolve, reject) => {
-      const sucessCb = DeviceEventEmitter.addListener('RNGoogleSignInSuccess', (user) => {
-        this._user = {...user};
-        RNGoogleSignin.getAccessToken(user).then((token) => {
-          this._user.accessToken = token;
-          this._removeListeners(sucessCb, errorCb);
-          resolve(this._user);
-        })
-        .catch(err => {
-          this._removeListeners(sucessCb, errorCb);
-          resolve(this._user);
-        });
-      });
+      const sucessCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignInSuccess",
+        user => {
+          this._user = { ...user };
+          RNGoogleSignin.getAccessToken(user)
+            .then(token => {
+              this._user.accessToken = token;
+              this._removeListeners(sucessCb, errorCb);
+              resolve(this._user);
+            })
+            .catch(err => {
+              this._removeListeners(sucessCb, errorCb);
+              resolve(this._user);
+            });
+        }
+      );
 
-      const errorCb = DeviceEventEmitter.addListener('RNGoogleSignInError', (err) => {
-        this._removeListeners(sucessCb, errorCb);
-        reject(new GoogleSigninError(err.error, err.code));
-      });
+      const errorCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignInError",
+        err => {
+          this._removeListeners(sucessCb, errorCb);
+          reject(new GoogleSigninError(err.error, err.code));
+        }
+      );
 
       RNGoogleSignin.signIn();
     });
@@ -137,15 +159,21 @@ class GoogleSignin {
 
   signOut() {
     return new Promise((resolve, reject) => {
-      const sucessCb = DeviceEventEmitter.addListener('RNGoogleSignOutSuccess', () => {
-        this._removeListeners(sucessCb, errorCb);
-        resolve();
-      });
+      const sucessCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignOutSuccess",
+        () => {
+          this._removeListeners(sucessCb, errorCb);
+          resolve();
+        }
+      );
 
-      const errorCb = DeviceEventEmitter.addListener('RNGoogleSignOutError', (err) => {
-        this._removeListeners(sucessCb, errorCb);
-        reject(new GoogleSigninError(err.error, err.code));
-      });
+      const errorCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignOutError",
+        err => {
+          this._removeListeners(sucessCb, errorCb);
+          reject(new GoogleSigninError(err.error, err.code));
+        }
+      );
 
       this._user = null;
       RNGoogleSignin.signOut();
@@ -154,17 +182,45 @@ class GoogleSignin {
 
   revokeAccess() {
     return new Promise((resolve, reject) => {
-      const sucessCb = DeviceEventEmitter.addListener('RNGoogleRevokeSuccess', () => {
-        this._removeListeners(sucessCb, errorCb);
-        resolve();
-      });
+      const sucessCb = DeviceEventEmitter.addListener(
+        "RNGoogleRevokeSuccess",
+        () => {
+          this._removeListeners(sucessCb, errorCb);
+          resolve();
+        }
+      );
 
-      const errorCb = DeviceEventEmitter.addListener('RNGoogleRevokeError', (err) => {
-        this._removeListeners(sucessCb, errorCb);
-        reject(new GoogleSigninError(err.error, err.code));
-      });
+      const errorCb = DeviceEventEmitter.addListener(
+        "RNGoogleRevokeError",
+        err => {
+          this._removeListeners(sucessCb, errorCb);
+          reject(new GoogleSigninError(err.error, err.code));
+        }
+      );
 
       RNGoogleSignin.revokeAccess();
+    });
+  }
+
+  hasPermissions(scopes) {
+    return new Promise((resolve, reject) => {
+      const sucessCb = DeviceEventEmitter.addListener(
+        "RNGoogleHasPermissions",
+        verdict => {
+          this._removeListeners(sucessCb, errorCb);
+          resolve(verdict);
+        }
+      );
+
+      const errorCb = DeviceEventEmitter.addListener(
+        "RNGoogleSignOutError",
+        err => {
+          this._removeListeners(sucessCb, errorCb);
+          reject(new GoogleSigninError(err.error, err.code));
+        }
+      );
+
+      RNGoogleSignin.hasPermissions(scopes);
     });
   }
 

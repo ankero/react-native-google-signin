@@ -245,7 +245,32 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule {
         }
     }
 
+    @ReactMethod
+    public void hasPermissions(ReadableArray scopes ){
+        Scope[] _scopes = scopeStringArrayToScopeArray(scopes);
+        Boolean hasRights = GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(getReactApplicationContext()), _scopes);
+        getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit("RNGoogleHasPermissions", hasRights);
+
+    }
+
+
     /* Private API */
+
+    private Scope[] scopeStringArrayToScopeArray(ReadableArray scopes){
+        int size = scopes.size();
+        Scope[] _scopes = new Scope[size];
+
+        if(scopes != null && size > 0){
+            for(int i = 0; i < size; i++){
+                if(scopes.getType(i).name().equals("String")){
+                    String scope = scopes.getString(i);
+                    _scopes[i] = new Scope(scope);
+                }
+            }
+        }
+        return _scopes;
+    }
 
     private  String  scopesToString(ReadableArray scopes) {
         String temp ="oauth2:";
