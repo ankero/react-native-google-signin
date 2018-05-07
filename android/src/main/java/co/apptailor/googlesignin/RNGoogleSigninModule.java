@@ -1,10 +1,11 @@
 package co.apptailor.googlesignin;
 
-import android.os.Bundle;
 import android.accounts.Account;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ActivityEventListener;
@@ -40,7 +41,6 @@ import java.util.Map;
 
 public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements ActivityEventListener {
     private GoogleApiClient _apiClient;
-    private GoogleApiClient.ConnectionCallbacks mConnectionListener;
 
     public static final int RC_SIGN_IN = 9001;
 
@@ -112,9 +112,21 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
         activity.runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                GoogleApiClient.ConnectionCallbacks mConnectionListener = new GoogleApiClient.ConnectionCallbacks() {
+                    @Override
+                    public void onConnected(@Nullable Bundle bundle) {
+                        promise.resolve(true);
+                    }
+
+                    @Override
+                    public void onConnectionSuspended(int i) {
+                        promise.reject("GOOGLE_API_CONNECT_ERROR", "GoogleApiClient connect failed");
+                    }
+                };
                 _apiClient = new GoogleApiClient.Builder(activity.getBaseContext())
                         .addApi(Auth.GOOGLE_SIGN_IN_API, getSignInOptions(scopes, webClientId, offlineAccess))
                         .build();
+                _apiClient.registerConnectionCallbacks(mConnectionListener);
                 _apiClient.connect();
                 promise.resolve(true);
             }
@@ -187,23 +199,19 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
             return;
         }
 
-        if (!_apiClient.isConnected()) {
-            GoogleApiClient.ConnectionCallbacks mConnectionListener = new GoogleApiClient.ConnectionCallbacks() {
-                @Override
-                public void onConnected(Bundle bundle) {
-                    _signOut();
+        Auth.GoogleSignInApi.signOut(_apiClient).setResultCallback(new ResultCallback<Status>() {
+            @Override
+            public void onResult(Status status) {
+                if (status.isSuccess()) {
+                    getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                            .emit("RNGoogleSignOutSuccess", null);
+                } else {
+                    int code = status.getStatusCode();
+                    String error = GoogleSignInStatusCodes.getStatusCodeString(code);
+                    emitError("RNGoogleSignOutError", code, error);
                 }
-
-                @Override
-                public void onConnectionSuspended(int cause) {
-                }
-            };
-
-            _apiClient.connect();
-            _apiClient.registerConnectionCallbacks(mConnectionListener);
-        } else {
-            _signOut();
-        }
+            }
+        });
     }
 
     @ReactMethod
@@ -245,26 +253,6 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
     }
 
     /* Private API */
-
-    private void _signOut() {
-        if (mConnectionListener != null) {
-            _apiClient.unregisterConnectionCallbacks(mConnectionListener);
-        }
-
-        Auth.GoogleSignInApi.signOut(_apiClient).setResultCallback(new ResultCallback<Status>() {
-            @Override
-            public void onResult(Status status) {
-                if (status.isSuccess()) {
-                    getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                            .emit("RNGoogleSignOutSuccess", null);
-                } else {
-                    int code = status.getStatusCode();
-                    String error = GoogleSignInStatusCodes.getStatusCodeString(code);
-                    emitError("RNGoogleSignOutError", code, error);
-                }
-            }
-        });
-    }
 
     private  String  scopesToString(ReadableArray scopes) {
         String temp ="oauth2:";
