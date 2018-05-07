@@ -8,7 +8,7 @@ import android.os.Bundle;
 import android.support.annotation.Nullable;
 
 import com.facebook.react.bridge.Arguments;
-import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.BaseActivityEventListener;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
@@ -29,6 +29,7 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.SignInButton;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
 import com.google.android.gms.common.api.OptionalPendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.Scope;
@@ -39,24 +40,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements ActivityEventListener {
+public class RNGoogleSigninModule extends ReactContextBaseJavaModule {
     private GoogleApiClient _apiClient;
 
     public static final int RC_SIGN_IN = 9001;
 
     public RNGoogleSigninModule(final ReactApplicationContext reactContext) {
         super(reactContext);
-        reactContext.addActivityEventListener(this);
+        reactContext.addActivityEventListener(new RNGoogleSigninActivityEventListener());
     }
 
-    @Override
-    public void onNewIntent(Intent intent) {}
-
-    @Override
-    public void onActivityResult(Activity activity, final int requestCode, final int resultCode, final Intent intent) {
-        if (requestCode == RNGoogleSigninModule.RC_SIGN_IN) {
-            GoogleSignInResult result = Auth.GoogleSignInApi.getSignInResultFromIntent(intent);
-            handleSignInResult(result, false);
+    private class RNGoogleSigninActivityEventListener extends BaseActivityEventListener {
+        @Override
+        public void onActivityResult(Activity activity, final int requestCode, final int resultCode, final Intent intent) {
+            if (requestCode == RNGoogleSigninModule.RC_SIGN_IN) {
+                GoogleSignInResult result = Auth.GoogleSignInApi.getSignInResultFromIntent(intent);
+                handleSignInResult(result, false);
+            }
         }
     }
 
@@ -101,34 +101,42 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
     }
 
     @ReactMethod
-    public void configure(final ReadableArray scopes, final String webClientId, final Boolean offlineAccess, final Promise promise) {
+    public void configure(
+            final ReadableArray scopes,
+            final String webClientId,
+            final Boolean offlineAccess,
+            final Boolean forceConsentPrompt,
+            final String accountName,
+            final String hostedDomain,
+            final Promise promise
+    ) {
         final Activity activity = getCurrentActivity();
 
         if (activity == null) {
             promise.reject("NO_ACTIVITY", "NO_ACTIVITY");
             return;
         }
+        
+        final ConnectionCallbacks connectionCallbacks = new ConnectionCallbacks() {
+            @Override
+            public void onConnected(@Nullable Bundle bundle) {
+                promise.resolve(true);
+            }
+
+            @Override
+            public void onConnectionSuspended(int i) {
+                promise.reject("CONNECT_ERROR", "CONNECT_ERROR");
+            }
+        };
 
         activity.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                GoogleApiClient.ConnectionCallbacks mConnectionListener = new GoogleApiClient.ConnectionCallbacks() {
-                    @Override
-                    public void onConnected(@Nullable Bundle bundle) {
-                        promise.resolve(true);
-                    }
-
-                    @Override
-                    public void onConnectionSuspended(int i) {
-                        promise.reject("GOOGLE_API_CONNECT_ERROR", "GoogleApiClient connect failed");
-                    }
-                };
                 _apiClient = new GoogleApiClient.Builder(activity.getBaseContext())
-                        .addApi(Auth.GOOGLE_SIGN_IN_API, getSignInOptions(scopes, webClientId, offlineAccess))
+                        .addApi(Auth.GOOGLE_SIGN_IN_API, getSignInOptions(scopes, webClientId, offlineAccess, forceConsentPrompt, accountName, hostedDomain))
+                        .addConnectionCallbacks(connectionCallbacks)
                         .build();
-                _apiClient.registerConnectionCallbacks(mConnectionListener);
                 _apiClient.connect();
-                promise.resolve(true);
             }
         });
     }
@@ -270,49 +278,51 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
                 .emit(eventName, params);
     }
 
-    private GoogleSignInOptions getSignInOptions(final ReadableArray scopes, final String webClientId, final Boolean offlineAcess) {
+    private GoogleSignInOptions getSignInOptions(
+            final ReadableArray scopes,
+            final String webClientId,
+            final Boolean offlineAcess,
+            final Boolean forceConsentPrompt,
+            final String accountName,
+            final String hostedDomain
+    ) {
 
         int size = scopes.size();
         Scope[] _scopes = new Scope[size];
 
         if(scopes != null && size > 0){
             for(int i = 0; i < size; i++){
-                if(scopes.getType(i).name() == "String"){
+                if(scopes.getType(i).name().equals("String")){
                     String scope = scopes.getString(i);
-                    if (scope != "email"){ // will be added by default
+                    if (!scope.equals("email")){ // will be added by default
                         _scopes[i] = new Scope(scope);
                     }
                 }
             }
         }
 
+        GoogleSignInOptions.Builder googleSignInOptionsBuilder = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestScopes(new Scope("email"), _scopes);
         if (webClientId != null && !webClientId.isEmpty()) {
             if (!offlineAcess) {
-                return new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken(webClientId)
-                        .requestScopes(new Scope("email"), _scopes)
-                        .build();
-            }
-            else {
-                return new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestServerAuthCode(webClientId, false)
-                        .requestScopes(new Scope("email"), _scopes)
-                        .build();
+                googleSignInOptionsBuilder.requestIdToken(webClientId);
+            } else {
+                googleSignInOptionsBuilder.requestServerAuthCode(webClientId, forceConsentPrompt);
             }
         }
-        else {
-            return new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                    .requestScopes(new Scope("email"), _scopes)
-                    .build();
+        if (accountName != null && !accountName.isEmpty()) {
+            googleSignInOptionsBuilder.setAccountName(accountName);
         }
-
+        if (hostedDomain != null && !hostedDomain.isEmpty()) {
+            googleSignInOptionsBuilder.setHostedDomain(hostedDomain);
+        }
+        return googleSignInOptionsBuilder.build();
     }
 
     private void handleSignInResult(GoogleSignInResult result, Boolean isSilent) {
         WritableMap params = Arguments.createMap();
         WritableArray scopes = Arguments.createArray();
 
-        if (result.isSuccess()) {
+        if (result != null && result.isSuccess()) {
             GoogleSignInAccount acct = result.getSignInAccount();
             Uri photoUrl = acct.getPhotoUrl();
 
@@ -325,6 +335,8 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
 
             params.putString("id", acct.getId());
             params.putString("name", acct.getDisplayName());
+            params.putString("givenName", acct.getGivenName());
+            params.putString("familyName", acct.getFamilyName());
             params.putString("email", acct.getEmail());
             params.putString("photo", photoUrl != null ? photoUrl.toString() : null);
             params.putString("idToken", acct.getIdToken());
@@ -334,12 +346,16 @@ public class RNGoogleSigninModule extends ReactContextBaseJavaModule implements 
             getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                     .emit(isSilent ? "RNGoogleSignInSilentSuccess" : "RNGoogleSignInSuccess" , params);
         } else {
-            int code = result.getStatus().getStatusCode();
-            String error = GoogleSignInStatusCodes.getStatusCodeString(code);
+            if (result != null) {
+                int code = result.getStatus().getStatusCode();
+                String error = GoogleSignInStatusCodes.getStatusCodeString(code);
 
-            params.putInt("code", code);
-            params.putString("error", error);
-
+                params.putInt("code", code);
+                params.putString("error", error);
+            } else {
+                params.putInt("code", -1);
+                params.putString("error", "GoogleSignInResult is NULL");
+            }
             getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                     .emit(isSilent ? "RNGoogleSignInSilentError" : "RNGoogleSignInError", params);
         }
